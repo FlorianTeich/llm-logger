@@ -3,6 +3,7 @@
 import os
 import json
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -17,6 +18,11 @@ ALLOWED_HOSTS = [
     for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
     if host.strip()
 ]
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -30,6 +36,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -56,12 +63,50 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": os.environ.get("DATABASE_PATH", str(BASE_DIR / "db.sqlite3")),
-    }
-}
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+if DATABASE_URL:
+    parsed_database_url = urlparse(DATABASE_URL)
+    if parsed_database_url.scheme in {"postgres", "postgresql", "postgresql+psycopg"}:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": unquote(parsed_database_url.path.lstrip("/")),
+                "USER": unquote(parsed_database_url.username or ""),
+                "PASSWORD": unquote(parsed_database_url.password or ""),
+                "HOST": parsed_database_url.hostname or "",
+                "PORT": parsed_database_url.port or "",
+                "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+                "OPTIONS": {"sslmode": os.environ.get("DB_SSLMODE", "prefer")},
+            }
+        }
+    elif parsed_database_url.scheme == "sqlite":
+        sqlite_path = unquote(parsed_database_url.path)
+        if parsed_database_url.netloc:
+            sqlite_path = f"//{parsed_database_url.netloc}{sqlite_path}"
+        DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": sqlite_path}}
+    else:
+        raise ImproperlyConfigured("DATABASE_URL must use postgres://, postgresql://, or sqlite://.")
+else:
+    if os.environ.get("DB_HOST"):
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": os.environ.get("DB_NAME", "llm_proxy"),
+                "USER": os.environ.get("DB_USER", "llm_proxy"),
+                "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+                "HOST": os.environ["DB_HOST"],
+                "PORT": os.environ.get("DB_PORT", "5432"),
+                "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+                "OPTIONS": {"sslmode": os.environ.get("DB_SSLMODE", "prefer")},
+            }
+        }
+    else:
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": os.environ.get("DATABASE_PATH", str(BASE_DIR / "db.sqlite3")),
+            }
+        }
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -74,6 +119,22 @@ TIME_ZONE = os.environ.get("TZ", "UTC")
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SECURE_SSL_REDIRECT", "false").lower() == "true"
+if os.environ.get("DJANGO_SECURE_PROXY_SSL_HEADER", "false").lower() == "true":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+if os.environ.get("DJANGO_SECURE_HSTS_SECONDS"):
+    SECURE_HSTS_SECONDS = int(os.environ["DJANGO_SECURE_HSTS_SECONDS"])
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = os.environ.get("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", "false").lower() == "true"
+    SECURE_HSTS_PRELOAD = os.environ.get("DJANGO_SECURE_HSTS_PRELOAD", "false").lower() == "true"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_REDIRECT_URL = "/logs/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"

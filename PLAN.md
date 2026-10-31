@@ -65,7 +65,7 @@ Build a self-hostable Django service that accepts OpenAI-compatible API requests
 - [ ] Add structured application logs.
 - [x] Generate request correlation IDs and propagate them to upstream requests.
 - [ ] Document retention, backup, and privacy behavior for logged prompts and completions.
-- [ ] Provide production database configuration, secret management notes, and Docker/deployment guidance.
+- [x] Provide production database configuration, secret management notes, and Docker/deployment guidance.
 - [x] Add usage documentation with OpenAI SDK and curl examples and supported compatibility details.
 
 ### 7. Verification and release readiness
@@ -75,4 +75,4 @@ Build a self-hostable Django service that accepts OpenAI-compatible API requests
 
 ## Current task
 
-The core proxy, request logging, authenticated list/detail pages, health/readiness endpoints, manual retention purge, and automated test suite are implemented. The initial migration is generated and applied locally. Remaining work includes formatting/lint tooling, structured application logs, deployment guidance, and a final security/privacy review. Dependencies are managed by `uv` and locked in `uv.lock`.
+The core proxy, request logging, authenticated list/detail pages, health/readiness endpoints, manual retention purge, and automated test suite are implemented. The initial migration is generated and applied locally. Production deployment now has Gunicorn, PostgreSQL, WhiteNoise static serving, Docker Compose, and deployment documentation. Remaining work includes formatting/lint tooling, structured application logs, and a final security/privacy review. Dependencies are managed by `uv` and locked in `uv.lock`.
