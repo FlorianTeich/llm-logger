@@ -1,7 +1,10 @@
+import hashlib
+import hmac
 import json
 import time
+from datetime import timedelta
 from typing import Iterator
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 import httpx
 from django.conf import settings
@@ -92,10 +95,76 @@ def _new_log(request: HttpRequest, endpoint: str) -> tuple[RequestLog, float, by
     log = RequestLog.objects.create(
         endpoint=endpoint,
         method=request.method[:12],
+        client_session_id=request.headers.get("X-Session-ID", "").strip()[:255],
+        client_scope_hash=_client_scope_hash(request) if endpoint == "/v1/chat/completions" else "",
         request_body=body,
         request_body_truncated=truncated,
     )
     return log, started, raw
+
+
+def _client_scope_hash(request: HttpRequest) -> str:
+    authorization = request.headers.get("Authorization", "").strip()
+    parts = authorization.split(None, 1)
+    credential = parts[1] if len(parts) == 2 and parts[0].lower() == "bearer" else authorization
+    scope = f"{request.META.get('REMOTE_ADDR', '')}\0{credential}"
+    return hmac.new(settings.SECRET_KEY.encode(), scope.encode(), hashlib.sha256).hexdigest()
+
+
+def _message_fingerprints(messages: list) -> list[str]:
+    secret = settings.SECRET_KEY.encode()
+    return [
+        hmac.new(
+            secret,
+            json.dumps(message, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        for message in messages
+    ]
+
+
+def _associate_conversation(log: RequestLog, messages: list) -> None:
+    fingerprints = _message_fingerprints(messages)
+    log.message_fingerprints = fingerprints
+
+    if log.client_session_id:
+        scoped_id = f"{log.client_scope_hash}:{log.client_session_id}"
+        log.conversation_group_id = uuid5(NAMESPACE_URL, scoped_id)
+        log.conversation_group_source = "header"
+        log.save(update_fields=(
+            "message_fingerprints", "conversation_group_id", "conversation_group_source"
+        ))
+        return
+
+    # History matching is heuristic: require the incoming transcript to extend
+    # at least two previous messages, and scope candidates to the same API key
+    # and client address to avoid cross-client collisions.
+    if len(fingerprints) >= 3:
+        candidates = RequestLog.objects.filter(
+            endpoint="/v1/chat/completions",
+            client_scope_hash=log.client_scope_hash,
+            started_at__gte=timezone.now() - timedelta(hours=24),
+        ).exclude(pk=log.pk).order_by("-started_at")[:250]
+        for previous in candidates:
+            prior = previous.message_fingerprints
+            if len(prior) < 2 or len(prior) >= len(fingerprints):
+                continue
+            if fingerprints[: len(prior)] != prior:
+                continue
+            group_id = previous.conversation_group_id or uuid5(
+                NAMESPACE_URL, f"llm-log-n-map:inferred:{previous.request_id}"
+            )
+            if previous.conversation_group_id is None:
+                previous.conversation_group_id = group_id
+                previous.conversation_group_source = "inferred"
+                previous.save(update_fields=("conversation_group_id", "conversation_group_source"))
+            log.conversation_group_id = group_id
+            log.conversation_group_source = "inferred"
+            break
+
+    log.save(update_fields=(
+        "message_fingerprints", "conversation_group_id", "conversation_group_source"
+    ))
 
 
 def _finalize(
@@ -386,6 +455,7 @@ def chat_completions(request: HttpRequest) -> HttpResponse:
             code="invalid_stream_option",
         )
 
+    _associate_conversation(log, payload["messages"])
     streaming = payload.get("stream") is True
     log.streaming = streaming
     log.save(update_fields=("model", "streaming"))
@@ -508,6 +578,8 @@ def request_log_list(request: HttpRequest) -> HttpResponse:
     from_date = parse_date(request.GET.get("from", ""))
     to_date = parse_date(request.GET.get("to", ""))
     search = request.GET.get("q", "").strip()
+    session_id = request.GET.get("session", "").strip()
+    group_id = request.GET.get("group", "").strip()
     if model:
         logs = logs.filter(model__icontains=model)
     if outcome in RequestLog.Outcome.values:
@@ -523,6 +595,15 @@ def request_log_list(request: HttpRequest) -> HttpResponse:
         except ValueError:
             search_filter |= Q(model__icontains=search)
         logs = logs.filter(search_filter)
+    if session_id:
+        logs = logs.filter(client_session_id=session_id)
+    if group_id:
+        try:
+            parsed_group_id = UUID(group_id)
+        except ValueError:
+            group_id = ""
+        else:
+            logs = logs.filter(conversation_group_id=parsed_group_id)
 
     page_obj = Paginator(logs, 50).get_page(request.GET.get("page"))
     return render(
@@ -536,6 +617,8 @@ def request_log_list(request: HttpRequest) -> HttpResponse:
                 "from": request.GET.get("from", ""),
                 "to": request.GET.get("to", ""),
                 "q": search,
+                "session": session_id,
+                "group": group_id,
             },
             "outcomes": RequestLog.Outcome.choices,
             "query_string": _query_without_page(request),

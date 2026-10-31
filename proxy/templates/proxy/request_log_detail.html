@@ -8,6 +8,7 @@
   <div><strong>Outcome</strong><span class="badge {{ log.outcome }}">{{ log.get_outcome_display }}</span></div>
   <div><strong>Endpoint</strong>{{ log.method }} {{ log.endpoint }}</div>
   <div><strong>Model</strong>{{ log.model|default:"—" }}</div>
+  <div><strong>Conversation group</strong>{% if log.conversation_group_id %}<a href="{% url 'request-log-list' %}?group={{ log.conversation_group_id }}"><code>{{ log.conversation_group_id }}</code></a><br><span class="muted">{{ log.get_conversation_group_source_display }}</span>{% elif log.client_session_id %}<code>{{ log.client_session_id }}</code><br><span class="muted">Explicit session ID (not grouped)</span>{% else %}—{% endif %}</div>
   <div><strong>HTTP status</strong>{{ log.status_code|default:"—" }}{% if log.upstream_status_code %} (upstream {{ log.upstream_status_code }}){% endif %}</div>
   <div><strong>Started</strong>{{ log.started_at|date:"Y-m-d H:i:s.u T" }}</div>
   <div><strong>Duration</strong>{% if log.latency_ms != None %}{{ log.latency_ms }} ms{% else %}—{% endif %}</div>

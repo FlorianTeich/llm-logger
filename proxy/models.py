@@ -32,6 +32,15 @@ class RequestLog(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
     endpoint = models.CharField(max_length=100, db_index=True)
     method = models.CharField(max_length=12)
+    client_session_id = models.CharField(max_length=255, blank=True, db_index=True)
+    client_scope_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    message_fingerprints = models.JSONField(default=list, blank=True)
+    conversation_group_id = models.UUIDField(null=True, blank=True, db_index=True)
+    conversation_group_source = models.CharField(
+        max_length=16,
+        blank=True,
+        choices=(("header", "Explicit session ID"), ("inferred", "Inferred from history")),
+    )
     model = models.CharField(max_length=255, blank=True, db_index=True)
     outcome = models.CharField(
         max_length=16, choices=Outcome.choices, default=Outcome.PENDING, db_index=True
