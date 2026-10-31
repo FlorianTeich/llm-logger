@@ -37,7 +37,9 @@ For a non-Docker WSGI deployment, install dependencies with `uv sync --no-dev --
 
 Back up PostgreSQL independently of the container and verify restores. Request logs may contain prompts and completions; body capture is disabled in `.env.example`, and retention cleanup remains a scheduled operator task (`purge_request_logs`). Choose a retention period and body logging policy that fit your data handling requirements. `docker compose down` retains the database volume; `docker compose down -v` deletes it.
 
-Point an OpenAI SDK at `http://localhost:8000/v1` and use `PROXY_API_KEY` as its API key. The proxy supports `GET /v1/models` and `POST /v1/chat/completions`, including streaming chat completions. If `UPSTREAM_MODELS` is empty, `/v1/models` is forwarded to the upstream provider. Set `UPSTREAM_MODEL_MAP` to a JSON object to map public model names to upstream names, for example `'{"my-model":"provider-model-v2"}'`.
+Point an OpenAI SDK at `http://localhost:8000/v1` and use `PROXY_API_KEY` as its API key. The proxy supports `GET /v1/models` and `POST /v1/chat/completions`, including streaming chat completions. If no models are configured, `/v1/models` is forwarded to the upstream provider. Set `UPSTREAM_MODEL_MAP` to a JSON object to map public model names to upstream names, for example `'{"my-model":"provider-model-v2"}'`.
+
+You can manage routes at `/admin/` under **Model routes**. Create a route with the model name your client will request as **Public name** and the provider's model name as **Upstream name**. Optionally set **Upstream base URL** to route chat completions to a different provider address; leave it blank to use `UPSTREAM_BASE_URL`. Routes appear in `/v1/models` and chat requests using that public name are sent upstream with the mapped name and address. You can edit or delete routes in the same admin page. Database routes take precedence over `UPSTREAM_MODEL_MAP`; configured `UPSTREAM_MODELS` and environment map names remain available alongside database routes. Apply migrations after deploying with `python manage.py migrate`.
 
 Example request:
 

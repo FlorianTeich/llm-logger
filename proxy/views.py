@@ -16,7 +16,25 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import csrf_exempt
 
 from .auth import proxy_key_is_valid
-from .models import RequestLog
+from .models import ModelRoute, RequestLog
+
+
+def _model_routes() -> dict[str, tuple[str, str]]:
+    routes = {
+        public_name: (upstream_name, "")
+        for public_name, upstream_name in settings.UPSTREAM_MODEL_MAP.items()
+    }
+    routes.update({
+        route.public_name: (route.upstream_name, route.upstream_base_url)
+        for route in ModelRoute.objects.all()
+    })
+    return routes
+
+
+def _public_models() -> list[str]:
+    routes = _model_routes()
+    configured = list(settings.UPSTREAM_MODELS) if settings.UPSTREAM_MODELS else list(settings.UPSTREAM_MODEL_MAP)
+    return list(dict.fromkeys([*configured, *routes.keys()]))
 
 
 def _capture(raw: bytes) -> tuple[str, bool]:
@@ -187,8 +205,8 @@ def _authorized(request: HttpRequest, log: RequestLog, started: float) -> JsonRe
     return None
 
 
-def _upstream_url(path: str) -> str:
-    return f"{settings.UPSTREAM_BASE_URL.rstrip('/')}/{path.lstrip('/')}"
+def _upstream_url(path: str, base_url: str | None = None) -> str:
+    return f"{(base_url or settings.UPSTREAM_BASE_URL).rstrip('/')}/{path.lstrip('/')}"
 
 
 def _upstream_headers(request_id: UUID, accept: str = "application/json") -> dict[str, str]:
@@ -249,7 +267,7 @@ def models_endpoint(request: HttpRequest) -> HttpResponse:
             code="method_not_allowed",
         )
 
-    configured = settings.UPSTREAM_MODELS or list(settings.UPSTREAM_MODEL_MAP.keys())
+    configured = _public_models()
     if configured:
         body = json.dumps(
             {
@@ -324,7 +342,8 @@ def chat_completions(request: HttpRequest) -> HttpResponse:
 
     model = payload.get("model")
     log.model = model[:255] if isinstance(model, str) else ""
-    configured_models = settings.UPSTREAM_MODELS or list(settings.UPSTREAM_MODEL_MAP.keys())
+    routes = _model_routes()
+    configured_models = _public_models()
     if not isinstance(model, str) or not model.strip():
         log.save(update_fields=("model",))
         return _error_response(
@@ -371,7 +390,7 @@ def chat_completions(request: HttpRequest) -> HttpResponse:
     log.streaming = streaming
     log.save(update_fields=("model", "streaming"))
     upstream_payload = dict(payload)
-    upstream_model = settings.UPSTREAM_MODEL_MAP.get(model, model)
+    upstream_model, route_base_url = routes.get(model, (model, ""))
     upstream_payload["model"] = upstream_model
     upstream_body = json.dumps(upstream_payload, separators=(",", ":")).encode()
     headers = _upstream_headers(
@@ -381,17 +400,17 @@ def chat_completions(request: HttpRequest) -> HttpResponse:
     headers["Content-Type"] = "application/json"
 
     if streaming:
-        return _stream_chat(log, started, upstream_body, headers)
-    return _buffered_chat(log, started, upstream_body, headers)
+        return _stream_chat(log, started, upstream_body, headers, route_base_url)
+    return _buffered_chat(log, started, upstream_body, headers, route_base_url)
 
 
 def _buffered_chat(
-    log: RequestLog, started: float, body: bytes, headers: dict[str, str]
+    log: RequestLog, started: float, body: bytes, headers: dict[str, str], base_url: str = ""
 ) -> HttpResponse:
     try:
         with httpx.Client(timeout=settings.UPSTREAM_TIMEOUT_SECONDS) as client:
             upstream = client.post(
-                _upstream_url("chat/completions"), content=body, headers=headers
+                _upstream_url("chat/completions", base_url), content=body, headers=headers
             )
     except httpx.HTTPError as exc:
         return _httpx_error(log, started, exc)
@@ -415,12 +434,12 @@ def _buffered_chat(
 
 
 def _stream_chat(
-    log: RequestLog, started: float, body: bytes, headers: dict[str, str]
+    log: RequestLog, started: float, body: bytes, headers: dict[str, str], base_url: str = ""
 ) -> HttpResponse:
     client = httpx.Client(timeout=settings.UPSTREAM_TIMEOUT_SECONDS)
     try:
         upstream_request = client.build_request(
-            "POST", _upstream_url("chat/completions"), content=body, headers=headers
+            "POST", _upstream_url("chat/completions", base_url), content=body, headers=headers
         )
         upstream = client.send(upstream_request, stream=True)
     except httpx.HTTPError as exc:

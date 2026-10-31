@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import RequestLog
+from .models import ModelRoute, RequestLog
+
+
+@admin.register(ModelRoute)
+class ModelRouteAdmin(admin.ModelAdmin):
+    list_display = ("public_name", "upstream_name", "upstream_base_url", "updated_at")
+    search_fields = ("public_name", "upstream_name", "upstream_base_url")
+    ordering = ("public_name",)
 
 
 @admin.register(RequestLog)

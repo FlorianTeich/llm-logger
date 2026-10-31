@@ -3,6 +3,22 @@ import uuid
 from django.db import models
 
 
+class ModelRoute(models.Model):
+    """A public OpenAI model ID and the model ID sent to the upstream provider."""
+
+    public_name = models.CharField(max_length=255, unique=True)
+    upstream_name = models.CharField(max_length=255)
+    upstream_base_url = models.URLField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("public_name",)
+
+    def __str__(self) -> str:
+        return f"{self.public_name} → {self.upstream_name}"
+
+
 class RequestLog(models.Model):
     class Outcome(models.TextChoices):
         PENDING = "pending", "Pending"
