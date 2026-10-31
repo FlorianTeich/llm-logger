@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}LLM Proxy Logs{% endblock %}</title>
+  <style>
+    :root { color-scheme: light; font: 15px/1.5 system-ui, sans-serif; color: #182230; background: #f4f6f8; }
+    body { margin: 0; }
+    header { background: #152238; color: white; padding: 14px max(24px, calc((100% - 1180px) / 2)); display:flex; align-items:center; justify-content:space-between; }
+    header a { color: white; text-decoration:none; font-weight:650; }
+    header form { margin:0; }
+    header button { border:1px solid #8290a3; background:transparent; color:white; padding:6px 10px; border-radius:5px; cursor:pointer; }
+    main { max-width:1180px; margin:32px auto; padding:0 20px; }
+    h1 { margin:0 0 8px; font-size:28px; }
+    .muted { color:#657387; }
+    .panel { background:white; border:1px solid #dce2e9; border-radius:8px; padding:18px; margin:18px 0; }
+    .filters { display:flex; gap:12px; flex-wrap:wrap; align-items:end; }
+    label { display:grid; gap:4px; color:#506075; font-size:13px; }
+    input, select { min-height:36px; border:1px solid #c9d1dc; border-radius:5px; padding:5px 8px; background:white; color:#182230; }
+    button, .button { min-height:36px; padding:7px 13px; border:0; border-radius:5px; background:#2459a6; color:white; cursor:pointer; text-decoration:none; display:inline-block; }
+    table { width:100%; border-collapse:collapse; background:white; }
+    th, td { text-align:left; padding:11px 10px; border-bottom:1px solid #e5e9ef; vertical-align:top; }
+    th { color:#536176; font-weight:600; font-size:13px; }
+    td code { font-size:12px; overflow-wrap:anywhere; }
+    .badge { display:inline-block; border-radius:999px; padding:2px 9px; background:#e9eef5; font-size:12px; }
+    .succeeded { background:#e3f5eb; color:#17643a; } .failed,.rejected,.interrupted { background:#fbe9e7; color:#983b2e; }
+    .pagination { display:flex; gap:14px; align-items:center; justify-content:flex-end; }
+    .metadata { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; }
+    .metadata div { min-width:0; } .metadata strong { display:block; color:#627087; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+    pre { margin:0; padding:16px; overflow:auto; max-height:65vh; background:#101a29; color:#e5edf8; border-radius:6px; font:13px/1.55 ui-monospace,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .body-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    @media(max-width:760px) { .body-grid { grid-template-columns:1fr; } table { display:block; overflow:auto; } }
+  </style>
+</head>
+<body>
+<header>
+  <a href="{% url 'request-log-list' %}">LLM Proxy Logs</a>
+  <nav>
+    <a href="{% url 'admin:index' %}">Admin</a>
+    {% if user.is_authenticated %}
+    <form method="post" action="{% url 'logout' %}" style="display:inline-block;margin-left:12px">
+      {% csrf_token %}<button type="submit">Sign out</button>
+    </form>
+    {% endif %}
+  </nav>
+</header>
+<main>{% block content %}{% endblock %}</main>
+</body>
+</html>

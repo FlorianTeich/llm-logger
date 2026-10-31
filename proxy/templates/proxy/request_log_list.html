@@ -1,0 +1,42 @@
+{% extends "proxy/base.html" %}
+{% block title %}Requests · LLM Proxy Logs{% endblock %}
+{% block content %}
+<h1>Requests</h1>
+<div class="muted">{{ page_obj.paginator.count }} logged request{{ page_obj.paginator.count|pluralize }}</div>
+<section class="panel">
+  <form class="filters" method="get">
+    <label>Search request ID or error<input name="q" value="{{ filters.q }}" placeholder="Request ID or message"></label>
+    <label>Model<input name="model" value="{{ filters.model }}" placeholder="Model name"></label>
+    <label>Outcome<select name="outcome"><option value="">Any outcome</option>{% for value,label in outcomes %}<option value="{{ value }}" {% if filters.outcome == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>From<input type="date" name="from" value="{{ filters.from }}"></label>
+    <label>To<input type="date" name="to" value="{{ filters.to }}"></label>
+    <button type="submit">Filter</button>
+    <a class="button" href="{% url 'request-log-list' %}">Clear</a>
+  </form>
+</section>
+<section class="panel" style="padding:0;overflow:hidden">
+  <table>
+    <thead><tr><th>Started</th><th>Request ID</th><th>Endpoint / model</th><th>Outcome</th><th>HTTP</th><th>Latency</th><th>Tokens</th></tr></thead>
+    <tbody>
+    {% for log in page_obj %}
+      <tr>
+        <td>{{ log.started_at|date:"Y-m-d H:i:s" }}</td>
+        <td><a href="{% url 'request-log-detail' log.request_id %}"><code>{{ log.request_id }}</code></a></td>
+        <td>{{ log.endpoint }}{% if log.model %}<br><span class="muted">{{ log.model }}</span>{% endif %}</td>
+        <td><span class="badge {{ log.outcome }}">{{ log.get_outcome_display }}</span></td>
+        <td>{{ log.status_code|default:"—" }}</td>
+        <td>{% if log.latency_ms != None %}{{ log.latency_ms }} ms{% else %}—{% endif %}</td>
+        <td>{{ log.total_tokens|default:"—" }}</td>
+      </tr>
+    {% empty %}<tr><td colspan="7" class="muted" style="padding:22px">No matching requests.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="pagination">
+  {% if page_obj.has_previous %}<a href="?{{ query_string }}{% if query_string %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+  <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}<a href="?{{ query_string }}{% if query_string %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

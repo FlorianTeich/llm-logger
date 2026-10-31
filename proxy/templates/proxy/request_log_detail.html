@@ -1,0 +1,22 @@
+{% extends "proxy/base.html" %}
+{% block title %}Request {{ log.request_id }} · LLM Proxy Logs{% endblock %}
+{% block content %}
+<p><a href="{% url 'request-log-list' %}">← All requests</a></p>
+<h1>Request detail</h1>
+<div class="muted"><code>{{ log.request_id }}</code></div>
+<section class="panel metadata">
+  <div><strong>Outcome</strong><span class="badge {{ log.outcome }}">{{ log.get_outcome_display }}</span></div>
+  <div><strong>Endpoint</strong>{{ log.method }} {{ log.endpoint }}</div>
+  <div><strong>Model</strong>{{ log.model|default:"—" }}</div>
+  <div><strong>HTTP status</strong>{{ log.status_code|default:"—" }}{% if log.upstream_status_code %} (upstream {{ log.upstream_status_code }}){% endif %}</div>
+  <div><strong>Started</strong>{{ log.started_at|date:"Y-m-d H:i:s.u T" }}</div>
+  <div><strong>Duration</strong>{% if log.latency_ms != None %}{{ log.latency_ms }} ms{% else %}—{% endif %}</div>
+  <div><strong>Token usage</strong>{{ log.prompt_tokens|default:"—" }} prompt / {{ log.completion_tokens|default:"—" }} completion / {{ log.total_tokens|default:"—" }} total</div>
+  <div><strong>Streaming</strong>{{ log.streaming|yesno:"Yes,No" }}</div>
+</section>
+{% if log.error_message %}<section class="panel"><strong>Error</strong><p>{{ log.error_message }}</p></section>{% endif %}
+<div class="body-grid">
+  <section><h2>Request body{% if log.request_body_truncated %} <span class="muted">(truncated)</span>{% endif %}</h2><pre>{% if request_pretty %}{{ request_pretty }}{% else %}(Body logging is disabled or the request had no body.){% endif %}</pre></section>
+  <section><h2>Response body{% if log.response_body_truncated %} <span class="muted">(truncated)</span>{% endif %}</h2><pre>{% if response_pretty %}{{ response_pretty }}{% else %}(No response body was recorded.){% endif %}</pre></section>
+</div>
+{% endblock %}

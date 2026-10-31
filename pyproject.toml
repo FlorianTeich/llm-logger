@@ -1,0 +1,28 @@
+[project]
+name = "llm-log-n-map"
+version = "0.1.0"
+description = "OpenAI-compatible LLM proxy with request and response logging"
+readme = "README.md"
+authors = [
+    { name = "Florian Teich", email = "florianteich@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "django",
+    "httpx",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["test_*.py"]
+addopts = "-ra"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-django>=4.14.0",
+    "respx>=0.23.1",
+]
